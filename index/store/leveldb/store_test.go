@@ -19,10 +19,14 @@ import (
 	"github.com/blevesearch/bleve/index/store"
 )
 
+var leveldbTestOptions = map[string]interface{}{
+	"create_if_missing": true,
+}
+
 func TestLevelDBStore(t *testing.T) {
 	defer os.RemoveAll("test")
 
-	s, err := Open("test", true, true)
+	s, err := Open("test", leveldbTestOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +38,7 @@ func TestLevelDBStore(t *testing.T) {
 func TestReaderIsolation(t *testing.T) {
 	defer os.RemoveAll("test")
 
-	s, err := Open("test", true, true)
+	s, err := Open("test", leveldbTestOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +94,7 @@ func CommonTestKVStore(t *testing.T, s store.KVStore) {
 		t.Fatalf("valid false, expected true")
 	}
 	if string(key) != "b" {
-		t.Fatalf("exepcted key b, got %s", key)
+		t.Fatalf("expected key b, got %s", key)
 	}
 	if string(val) != "val-b" {
 		t.Fatalf("expected value val-b, got %s", val)
@@ -102,7 +106,7 @@ func CommonTestKVStore(t *testing.T, s store.KVStore) {
 		t.Fatalf("valid false, expected true")
 	}
 	if string(key) != "c" {
-		t.Fatalf("exepcted key c, got %s", key)
+		t.Fatalf("expected key c, got %s", key)
 	}
 	if string(val) != "val-c" {
 		t.Fatalf("expected value val-c, got %s", val)
@@ -114,7 +118,7 @@ func CommonTestKVStore(t *testing.T, s store.KVStore) {
 		t.Fatalf("valid false, expected true")
 	}
 	if string(key) != "i" {
-		t.Fatalf("exepcted key i, got %s", key)
+		t.Fatalf("expected key i, got %s", key)
 	}
 	if string(val) != "val-i" {
 		t.Fatalf("expected value val-i, got %s", val)
@@ -135,14 +139,14 @@ func CommonTestReaderIsolation(t *testing.T, s store.KVStore) {
 	}
 	writer.Close()
 
-	// create an isoalted reader
+	// create an isolated reader
 	reader, err := s.Reader()
 	if err != nil {
 		t.Error(err)
 	}
 	defer reader.Close()
 
-	// verify we see the value already inserted
+	// verify that we see the value already inserted
 	val, err := reader.Get([]byte("a"))
 	if err != nil {
 		t.Error(err)
@@ -188,7 +192,7 @@ func CommonTestReaderIsolation(t *testing.T, s store.KVStore) {
 		t.Errorf("expected val-b, got nil")
 	}
 
-	// ensure director iterator sees it
+	// ensure that the director iterator sees it
 	count = 0
 	it = newReader.Iterator([]byte{0})
 	defer it.Close()

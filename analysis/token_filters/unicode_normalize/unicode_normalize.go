@@ -12,9 +12,9 @@ package unicode_normalize
 import (
 	"fmt"
 
-	"golang.org/x/text/unicode/norm"
 	"github.com/blevesearch/bleve/analysis"
 	"github.com/blevesearch/bleve/registry"
+	"golang.org/x/text/unicode/norm"
 )
 
 const Name = "normalize_unicode"
@@ -28,7 +28,7 @@ var forms = map[string]norm.Form{
 	NFC:  norm.NFC,
 	NFD:  norm.NFD,
 	NFKC: norm.NFKC,
-	NFKD: norm.NFKC,
+	NFKD: norm.NFKD,
 }
 
 type UnicodeNormalizeFilter struct {

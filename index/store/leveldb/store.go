@@ -29,15 +29,13 @@ type Store struct {
 	writer sync.Mutex
 }
 
-func Open(path string, createIfMissing bool, errorIfExists bool) (*Store, error) {
+func Open(path string, config map[string]interface{}) (*Store, error) {
 	rv := Store{
 		path: path,
+		opts: levigo.NewOptions(),
 	}
 
-	opts := levigo.NewOptions()
-	opts.SetCreateIfMissing(createIfMissing)
-	opts.SetErrorIfExists(errorIfExists)
-	rv.opts = opts
+	applyConfig(rv.opts, config)
 
 	var err error
 	rv.db, err = levigo.Open(rv.path, rv.opts)
@@ -49,13 +47,18 @@ func Open(path string, createIfMissing bool, errorIfExists bool) (*Store, error)
 }
 
 func (ldbs *Store) get(key []byte) ([]byte, error) {
-	return ldbs.db.Get(defaultReadOptions(), key)
+	options := defaultReadOptions()
+	b, err := ldbs.db.Get(options, key)
+	options.Close()
+	return b, err
 }
 
 func (ldbs *Store) getWithSnapshot(key []byte, snapshot *levigo.Snapshot) ([]byte, error) {
 	options := defaultReadOptions()
 	options.SetSnapshot(snapshot)
-	return ldbs.db.Get(options, key)
+	b, err := ldbs.db.Get(options, key)
+	options.Close()
+	return b, err
 }
 
 func (ldbs *Store) set(key, val []byte) error {
@@ -65,7 +68,10 @@ func (ldbs *Store) set(key, val []byte) error {
 }
 
 func (ldbs *Store) setlocked(key, val []byte) error {
-	return ldbs.db.Put(defaultWriteOptions(), key, val)
+	options := defaultWriteOptions()
+	err := ldbs.db.Put(options, key, val)
+	options.Close()
+	return err
 }
 
 func (ldbs *Store) delete(key []byte) error {
@@ -75,11 +81,15 @@ func (ldbs *Store) delete(key []byte) error {
 }
 
 func (ldbs *Store) deletelocked(key []byte) error {
-	return ldbs.db.Delete(defaultWriteOptions(), key)
+	options := defaultWriteOptions()
+	err := ldbs.db.Delete(options, key)
+	options.Close()
+	return err
 }
 
 func (ldbs *Store) Close() error {
 	ldbs.db.Close()
+	ldbs.opts.Close()
 	return nil
 }
 
@@ -106,19 +116,52 @@ func StoreConstructor(config map[string]interface{}) (store.KVStore, error) {
 	if !ok {
 		return nil, fmt.Errorf("must specify path")
 	}
-	createIfMissing := false
-	cim, ok := config["create_if_missing"].(bool)
-	if ok {
-		createIfMissing = cim
-	}
-	errorIfExists := true
-	eie, ok := config["error_if_exists"].(bool)
-	if ok {
-		errorIfExists = eie
-	}
-	return Open(path, createIfMissing, errorIfExists)
+	return Open(path, config)
 }
 
 func init() {
 	registry.RegisterKVStore(Name, StoreConstructor)
+}
+
+func applyConfig(o *levigo.Options, config map[string]interface{}) (
+	*levigo.Options, error) {
+
+	cim, ok := config["create_if_missing"].(bool)
+	if ok {
+		o.SetCreateIfMissing(cim)
+	}
+
+	eie, ok := config["error_if_exists"].(bool)
+	if ok {
+		o.SetErrorIfExists(eie)
+	}
+
+	wbs, ok := config["write_buffer_size"].(float64)
+	if ok {
+		o.SetWriteBufferSize(int(wbs))
+	}
+
+	bs, ok := config["block_size"].(float64)
+	if ok {
+		o.SetBlockSize(int(bs))
+	}
+
+	bri, ok := config["block_restart_interval"].(float64)
+	if ok {
+		o.SetBlockRestartInterval(int(bri))
+	}
+
+	lcc, ok := config["lru_cache_capacity"].(float64)
+	if ok {
+		lruCache := levigo.NewLRUCache(int(lcc))
+		o.SetCache(lruCache)
+	}
+
+	bfbpk, ok := config["bloom_filter_bits_per_key"].(float64)
+	if ok {
+		bf := levigo.NewBloomFilter(int(bfbpk))
+		o.SetFilterPolicy(bf)
+	}
+
+	return o, nil
 }

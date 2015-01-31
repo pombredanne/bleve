@@ -70,12 +70,12 @@ func (dr *dateTimeRange) UnmarshalJSON(input []byte) error {
 	return nil
 }
 
-// A FacetRequest describes an facet or aggregation
+// A FacetRequest describes a facet or aggregation
 // of the result document set you would like to be
 // built.
 type FacetRequest struct {
-	Size           int
-	Field          string
+	Size           int              `json:"size"`
+	Field          string           `json:"field"`
 	NumericRanges  []*numericRange  `json:"numeric_ranges,omitempty"`
 	DateTimeRanges []*dateTimeRange `json:"date_ranges,omitempty"`
 }
@@ -151,11 +151,13 @@ func (h *HighlightRequest) AddField(field string) {
 // result set to return.
 // Highlight describes optional search result
 // highlighting.
-// Fields desribed a list of field values whcih
+// Fields describes a list of field values which
 // should be retrieved for result documents.
 // Facets describe the set of facets to be computed.
 // Explain triggers inclusion of additional search
 // result score explanations.
+//
+// A special field named "*" can be used to return all fields.
 type SearchRequest struct {
 	Query     Query             `json:"query"`
 	Size      int               `json:"size"`
@@ -257,12 +259,30 @@ func (sr *SearchResult) String() string {
 						rv += fmt.Sprintf("\t\t%s\n", fragment)
 					}
 				}
+				for otherFieldName, otherFieldValue := range hit.Fields {
+					if _, ok := hit.Fragments[otherFieldName]; !ok {
+						rv += fmt.Sprintf("\t%s\n", otherFieldName)
+						rv += fmt.Sprintf("\t\t%v\n", otherFieldValue)
+					}
+				}
 			}
 		} else {
 			rv = fmt.Sprintf("%d matches, took %s\n", sr.Total, sr.Took)
 		}
 	} else {
 		rv = "No matches"
+	}
+	if len(sr.Facets) > 0 {
+		rv += fmt.Sprintf("Facets:\n")
+		for fn, f := range sr.Facets {
+			rv += fmt.Sprintf("%s(%d)\n", fn, f.Total)
+			for _, t := range f.Terms {
+				rv += fmt.Sprintf("\t%s(%d)\n", t.Term, t.Count)
+			}
+			if f.Other != 0 {
+				rv += fmt.Sprintf("\tOther(%d)\n", f.Other)
+			}
+		}
 	}
 	return rv
 }

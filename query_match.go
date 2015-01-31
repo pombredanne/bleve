@@ -11,7 +11,6 @@ package bleve
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
@@ -27,7 +26,7 @@ type matchQuery struct {
 }
 
 // NewMatchQuery creates a Query for matching text.
-// An Analyzer is chosed based on the field.
+// An Analyzer is chosen based on the field.
 // Input text is analyzed using this analyzer.
 // Token terms resulting from this analysis are
 // used to perform term searches.  Result documents
@@ -99,7 +98,6 @@ func (q *matchQuery) Searcher(i index.IndexReader, m *IndexMapping, explain bool
 
 		tqs := make([]Query, len(tokens))
 		if q.FuzzinessVal != 0 {
-			log.Printf("fuzziness is %d", q.FuzzinessVal)
 			for i, token := range tokens {
 				query := NewFuzzyQuery(string(token.Term))
 				query.SetFuzziness(q.FuzzinessVal)

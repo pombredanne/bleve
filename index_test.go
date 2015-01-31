@@ -11,8 +11,10 @@ package bleve
 
 import (
 	"io/ioutil"
+	"log"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestCrud(t *testing.T) {
@@ -207,7 +209,7 @@ func TestIndexOpenMetaMissingOrCorrupt(t *testing.T) {
 
 	index, err = Open("testidx")
 	if err != ErrorUnknownStorageType {
-		t.Fatalf("expected error unkown storage type, got %v", err)
+		t.Fatalf("expected error unknown storage type, got %v", err)
 	}
 
 	// now intentionally corrupt the metadata
@@ -218,7 +220,7 @@ func TestIndexOpenMetaMissingOrCorrupt(t *testing.T) {
 		t.Fatalf("expected error index metadata corrupted, got %v", err)
 	}
 
-	// no intentionally remove the metadata
+	// now intentionally remove the metadata
 	os.Remove("testidx/index_meta.json")
 
 	index, err = Open("testidx")
@@ -278,4 +280,86 @@ func TestClosedIndex(t *testing.T) {
 	if err != ErrorIndexClosed {
 		t.Errorf("expected error index closed, got %v", err)
 	}
+}
+
+func TestSlowSearch(t *testing.T) {
+	defer os.RemoveAll("testidx")
+
+	defer func() {
+		// reset logger back to normal
+		SetLog(log.New(ioutil.Discard, "bleve", log.LstdFlags))
+	}()
+	// set custom logger
+	var sdw sawDataWriter
+	SetLog(log.New(&sdw, "bleve", log.LstdFlags))
+
+	index, err := New("testidx", NewIndexMapping())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer index.Close()
+
+	Config.SlowSearchLogThreshold = 1 * time.Minute
+
+	query := NewTermQuery("water")
+	req := NewSearchRequest(query)
+	index.Search(req)
+
+	if sdw.sawData {
+		t.Errorf("expected to not see slow query logged, but did")
+	}
+
+	Config.SlowSearchLogThreshold = 1 * time.Microsecond
+	index.Search(req)
+
+	if !sdw.sawData {
+		t.Errorf("expected to see slow query logged, but didn't")
+	}
+}
+
+type sawDataWriter struct {
+	sawData bool
+}
+
+func (s *sawDataWriter) Write(p []byte) (n int, err error) {
+	s.sawData = true
+	return len(p), nil
+}
+
+func TestStoredFieldPreserved(t *testing.T) {
+	defer os.RemoveAll("testidx")
+
+	index, err := New("testidx", NewIndexMapping())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doca := map[string]interface{}{
+		"name": "Marty",
+		"desc": "GopherCON India",
+	}
+	err = index.Index("a", doca)
+	if err != nil {
+		t.Error(err)
+	}
+
+	q := NewTermQuery("marty")
+	req := NewSearchRequest(q)
+	req.Fields = []string{"name", "desc"}
+	res, err := index.Search(req)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(res.Hits) != 1 {
+		t.Errorf("expected 1 hit, got %d", len(res.Hits))
+	}
+
+	if res.Hits[0].Fields["name"] != "Marty" {
+		t.Errorf("expected 'Marty' got '%s'", res.Hits[0].Fields["name"])
+	}
+	if res.Hits[0].Fields["desc"] != "GopherCON India" {
+		t.Errorf("expected 'GopherCON India' got '%s'", res.Hits[0].Fields["desc"])
+	}
+
 }

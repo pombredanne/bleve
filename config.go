@@ -11,6 +11,8 @@ package bleve
 
 import (
 	"expvar"
+	"io/ioutil"
+	"log"
 	"time"
 
 	"github.com/blevesearch/bleve/index/upside_down"
@@ -98,6 +100,7 @@ import (
 
 	// kv stores
 	_ "github.com/blevesearch/bleve/index/store/boltdb"
+	_ "github.com/blevesearch/bleve/index/store/gtreap"
 	_ "github.com/blevesearch/bleve/index/store/inmem"
 
 	// byte array converters
@@ -109,10 +112,11 @@ import (
 var bleveExpVar = expvar.NewMap("bleve")
 
 type configuration struct {
-	Cache              *registry.Cache
-	DefaultHighlighter string
-	DefaultKVStore     string
-	analysisQueue      upside_down.AnalysisQueue
+	Cache                  *registry.Cache
+	DefaultHighlighter     string
+	DefaultKVStore         string
+	SlowSearchLogThreshold time.Duration
+	analysisQueue          upside_down.AnalysisQueue
 }
 
 func newConfiguration() *configuration {
@@ -160,4 +164,12 @@ func init() {
 
 	bootDuration := time.Since(bootStart)
 	bleveExpVar.Add("bootDuration", int64(bootDuration))
+}
+
+var logger = log.New(ioutil.Discard, "bleve", log.LstdFlags)
+
+// SetLog sets the logger used for logging
+// by default log messages are sent to ioutil.Discard
+func SetLog(l *log.Logger) {
+	logger = l
 }

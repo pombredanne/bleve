@@ -135,7 +135,9 @@ func (s *Highlighter) BestFragmentsInField(dm *search.DocumentMatch, doc *docume
 	if dm.Fragments == nil {
 		dm.Fragments = make(search.FieldFragmentMap, 0)
 	}
-	dm.Fragments[field] = formattedFragments
+	if len(formattedFragments) > 0 {
+		dm.Fragments[field] = formattedFragments
+	}
 
 	return formattedFragments
 }
@@ -146,7 +148,7 @@ type FragmentQueue []*highlight.Fragment
 func (fq FragmentQueue) Len() int { return len(fq) }
 
 func (fq FragmentQueue) Less(i, j int) bool {
-	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
+	// We want Pop to give us the highest, not lowest, priority so we use greater-than here.
 	return fq[i].Score > fq[j].Score
 }
 

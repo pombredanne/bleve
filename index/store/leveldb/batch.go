@@ -73,7 +73,7 @@ func (ldb *Batch) Execute() error {
 	batch := levigo.NewWriteBatch()
 	defer batch.Close()
 
-	// first processed the merges
+	// first process the merges
 	for k, mc := range ldb.merges {
 		val, err := ldb.store.get([]byte(k))
 		if err != nil {
@@ -99,7 +99,10 @@ func (ldb *Batch) Execute() error {
 		}
 	}
 
-	return ldb.store.db.Write(defaultWriteOptions(), batch)
+	wopts := defaultWriteOptions()
+	err := ldb.store.db.Write(wopts, batch)
+	wopts.Close()
+	return err
 }
 
 func (ldb *Batch) Close() error {

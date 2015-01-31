@@ -50,7 +50,7 @@ func newMemIndex(mapping *IndexMapping) (*indexImpl, error) {
 	rv := indexImpl{
 		path:  "",
 		m:     mapping,
-		meta:  newIndexMeta("mem"),
+		meta:  newIndexMeta("mem", nil),
 		stats: &IndexStat{},
 	}
 
@@ -65,7 +65,7 @@ func newMemIndex(mapping *IndexMapping) (*indexImpl, error) {
 		return nil, err
 	}
 
-	// open open the index
+	// open the index
 	rv.i = upside_down.NewUpsideDownCouch(rv.s, Config.analysisQueue)
 	err = rv.i.Open()
 	if err != nil {
@@ -90,7 +90,7 @@ func newMemIndex(mapping *IndexMapping) (*indexImpl, error) {
 	return &rv, nil
 }
 
-func newIndex(path string, mapping *IndexMapping) (*indexImpl, error) {
+func newIndexUsing(path string, mapping *IndexMapping, kvstore string, kvconfig map[string]interface{}) (*indexImpl, error) {
 	// first validate the mapping
 	err := mapping.validate()
 	if err != nil {
@@ -101,34 +101,36 @@ func newIndex(path string, mapping *IndexMapping) (*indexImpl, error) {
 		return newMemIndex(mapping)
 	}
 
+	if kvconfig == nil {
+		kvconfig = map[string]interface{}{}
+	}
+
 	rv := indexImpl{
 		path:  path,
 		m:     mapping,
-		meta:  newIndexMeta(Config.DefaultKVStore),
+		meta:  newIndexMeta(kvstore, kvconfig),
 		stats: &IndexStat{},
 	}
 	storeConstructor := registry.KVStoreConstructorByName(rv.meta.Storage)
 	if storeConstructor == nil {
 		return nil, ErrorUnknownStorageType
 	}
-	// at this point there hope we can be successful, so save index meta
+	// at this point there is hope that we can be successful, so save index meta
 	err = rv.meta.Save(path)
 	if err != nil {
 		return nil, err
 	}
-	storeConfig := map[string]interface{}{
-		"path":              indexStorePath(path),
-		"create_if_missing": true,
-		"error_if_exists":   true,
-	}
+	kvconfig["create_if_missing"] = true
+	kvconfig["error_if_exists"] = true
+	kvconfig["path"] = indexStorePath(path)
 
 	// now open the store
-	rv.s, err = storeConstructor(storeConfig)
+	rv.s, err = storeConstructor(kvconfig)
 	if err != nil {
 		return nil, err
 	}
 
-	// open open the index
+	// open the index
 	rv.i = upside_down.NewUpsideDownCouch(rv.s, Config.analysisQueue)
 	err = rv.i.Open()
 	if err != nil {
@@ -153,7 +155,7 @@ func newIndex(path string, mapping *IndexMapping) (*indexImpl, error) {
 	return &rv, nil
 }
 
-func openIndex(path string) (*indexImpl, error) {
+func openIndexUsing(path string, runtimeConfig map[string]interface{}) (*indexImpl, error) {
 
 	rv := indexImpl{
 		path:  path,
@@ -170,10 +172,16 @@ func openIndex(path string) (*indexImpl, error) {
 		return nil, ErrorUnknownStorageType
 	}
 
-	storeConfig := map[string]interface{}{
-		"path":              indexStorePath(path),
-		"create_if_missing": false,
-		"error_if_exists":   false,
+	storeConfig := rv.meta.Config
+	if storeConfig == nil {
+		storeConfig = map[string]interface{}{}
+	}
+
+	storeConfig["path"] = indexStorePath(path)
+	storeConfig["create_if_missing"] = false
+	storeConfig["error_if_exists"] = false
+	for rck, rcv := range runtimeConfig {
+		storeConfig[rck] = rcv
 	}
 
 	// now open the store
@@ -182,7 +190,7 @@ func openIndex(path string) (*indexImpl, error) {
 		return nil, err
 	}
 
-	// open open the index
+	// open the index
 	rv.i = upside_down.NewUpsideDownCouch(rv.s, Config.analysisQueue)
 	err = rv.i.Open()
 	if err != nil {
@@ -222,6 +230,12 @@ func openIndex(path string) (*indexImpl, error) {
 
 	rv.m = &im
 	return &rv, nil
+}
+
+// Advanced returns implementation internals
+// necessary ONLY for advanced usage.
+func (i *indexImpl) Advanced() (index.Index, store.KVStore, error) {
+	return i.i, i.s, nil
 }
 
 // Mapping returns the IndexMapping in use by this
@@ -354,7 +368,7 @@ func (i *indexImpl) Search(req *SearchRequest) (*SearchResult, error) {
 	// open a reader for this search
 	indexReader, err := i.i.Reader()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error opening index reader %v", err)
 	}
 	defer indexReader.Close()
 
@@ -469,7 +483,12 @@ func (i *indexImpl) Search(req *SearchRequest) (*SearchResult, error) {
 	}
 
 	atomic.AddUint64(&i.stats.searches, 1)
-	atomic.AddUint64(&i.stats.searchTime, uint64(time.Since(searchStart)))
+	searchDuration := time.Since(searchStart)
+	atomic.AddUint64(&i.stats.searchTime, uint64(searchDuration))
+
+	if searchDuration > Config.SlowSearchLogThreshold {
+		logger.Printf("slow search took %s - %v", searchDuration, req)
+	}
 
 	return &SearchResult{
 		Request:  req,
@@ -501,7 +520,7 @@ func (i *indexImpl) Fields() ([]string, error) {
 
 // DumpAll writes all index rows to a channel.
 // INTERNAL: do not rely on this function, it is
-// only intended to be used by the debug utilties
+// only intended to be used by the debug utilities
 func (i *indexImpl) DumpAll() chan interface{} {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
@@ -516,7 +535,7 @@ func (i *indexImpl) DumpAll() chan interface{} {
 // DumpFields writes all field rows in the index
 // to a channel.
 // INTERNAL: do not rely on this function, it is
-// only intended to be used by the debug utilties
+// only intended to be used by the debug utilities
 func (i *indexImpl) DumpFields() chan interface{} {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
@@ -530,7 +549,7 @@ func (i *indexImpl) DumpFields() chan interface{} {
 // DumpDoc writes all rows in the index associated
 // with the specified identifier to a channel.
 // INTERNAL: do not rely on this function, it is
-// only intended to be used by the debug utilties
+// only intended to be used by the debug utilities
 func (i *indexImpl) DumpDoc(id string) chan interface{} {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()

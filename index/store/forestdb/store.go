@@ -14,6 +14,7 @@ package forestdb
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -22,7 +23,26 @@ import (
 	"github.com/couchbaselabs/goforestdb"
 )
 
-const Name = "leveldb"
+type ForestDBConfig struct {
+	BlockSize                 uint32
+	BufferCacheSize           uint64
+	ChunkSize                 uint16
+	CleanupCacheOnClose       bool
+	CompactionBufferSizeMax   uint32
+	CompactionMinimumFilesize uint64
+	CompactionMode            forestdb.CompactOpt
+	CompactionThreshold       uint8
+	CompactorSleepDuration    uint64
+	CompressDocumentBody      bool
+	DurabilityOpt             forestdb.DurabilityOpt
+	OpenFlags                 forestdb.OpenFlags
+	PurgingInterval           uint32
+	SeqTreeOpt                forestdb.SeqTreeOpt
+	WalFlushBeforeCommit      bool
+	WalThreshold              uint64
+}
+
+const Name = "forestdb"
 
 type Store struct {
 	path     string
@@ -33,10 +53,22 @@ type Store struct {
 	writer   sync.Mutex
 }
 
-func Open(path string, createIfMissing bool) (*Store, error) {
+func Open(path string, createIfMissing bool,
+	config map[string]interface{}) (*Store, error) {
+	if config == nil {
+		config = map[string]interface{}{}
+	}
+
+	forestDBDefaultConfig := forestdb.DefaultConfig()
+	forestDBDefaultConfig.SetCompactionMode(forestdb.COMPACT_AUTO)
+	forestDBConfig, err := applyConfig(forestDBDefaultConfig, config)
+	if err != nil {
+		return nil, err
+	}
+
 	rv := Store{
 		path:     path,
-		config:   forestdb.DefaultConfig(),
+		config:   forestDBConfig,
 		kvconfig: forestdb.DefaultKVStoreConfig(),
 	}
 
@@ -44,7 +76,6 @@ func Open(path string, createIfMissing bool) (*Store, error) {
 		rv.kvconfig.SetCreateIfMissing(true)
 	}
 
-	var err error
 	rv.dbfile, err = forestdb.Open(rv.path, rv.config)
 	if err != nil {
 		return nil, err
@@ -128,12 +159,20 @@ func (s *Store) getSeqNum() (forestdb.SeqNum, error) {
 func (s *Store) newSnapshot() (*forestdb.KVStore, error) {
 	seqNum, err := s.getSeqNum()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting snapshot seqnum: %v", err)
 	}
-	return s.dbkv.SnapshotOpen(seqNum)
+	snapshot, err := s.dbkv.SnapshotOpen(seqNum)
+	if err == forestdb.RESULT_NO_DB_INSTANCE {
+		checkAgainSeqNum, err := s.getSeqNum()
+		if err != nil {
+			return nil, fmt.Errorf("error getting snapshot seqnum again: %v", err)
+		}
+		return nil, fmt.Errorf("cannot open snapshot %v, checked again its %v, error: %v", seqNum, checkAgainSeqNum, err)
+	}
+	return snapshot, err
 }
 
-func (s *Store) getRollbackID() ([]byte, error) {
+func (s *Store) GetRollbackID() ([]byte, error) {
 	seqNum, err := s.getSeqNum()
 	if err != nil {
 		return nil, err
@@ -146,7 +185,7 @@ func (s *Store) getRollbackID() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (s *Store) rollbackTo(rollbackId []byte) error {
+func (s *Store) RollbackTo(rollbackId []byte) error {
 	s.writer.Lock()
 	defer s.writer.Unlock()
 	buf := bytes.NewReader(rollbackId)
@@ -172,9 +211,81 @@ func StoreConstructor(config map[string]interface{}) (store.KVStore, error) {
 	if ok {
 		createIfMissing = cim
 	}
-	return Open(path, createIfMissing)
+	return Open(path, createIfMissing, config)
 }
 
 func init() {
 	registry.RegisterKVStore(Name, StoreConstructor)
+}
+
+func applyConfig(c *forestdb.Config, config map[string]interface{}) (
+	*forestdb.Config, error) {
+	v, exists := config["forestDBConfig"]
+	if !exists || v == nil {
+		return c, nil
+	}
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return c, nil
+	}
+	// These extra steps of json.Marshal()/Unmarshal() help to convert
+	// to the types that we need for the setter calls.
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	var f ForestDBConfig
+	err = json.Unmarshal(b, &f)
+	if err != nil {
+		return nil, err
+	}
+	if _, exists := m["blockSize"]; exists {
+		c.SetBlockSize(f.BlockSize)
+	}
+	if _, exists := m["bufferCacheSize"]; exists {
+		c.SetBufferCacheSize(f.BufferCacheSize)
+	}
+	if _, exists := m["chunkSize"]; exists {
+		c.SetChunkSize(f.ChunkSize)
+	}
+	if _, exists := m["cleanupCacheOnClose"]; exists {
+		c.SetCleanupCacheOnClose(f.CleanupCacheOnClose)
+	}
+	if _, exists := m["compactionBufferSizeMax"]; exists {
+		c.SetCompactionBufferSizeMax(f.CompactionBufferSizeMax)
+	}
+	if _, exists := m["compactionMinimumFilesize"]; exists {
+		c.SetCompactionMinimumFilesize(f.CompactionMinimumFilesize)
+	}
+	if _, exists := m["compactionMode"]; exists {
+		c.SetCompactionMode(f.CompactionMode)
+	}
+	if _, exists := m["compactionThreshold"]; exists {
+		c.SetCompactionThreshold(f.CompactionThreshold)
+	}
+	if _, exists := m["compactorSleepDuration"]; exists {
+		c.SetCompactorSleepDuration(f.CompactorSleepDuration)
+	}
+	if _, exists := m["compressDocumentBody"]; exists {
+		c.SetCompressDocumentBody(f.CompressDocumentBody)
+	}
+	if _, exists := m["durabilityOpt"]; exists {
+		c.SetDurabilityOpt(f.DurabilityOpt)
+	}
+	if _, exists := m["openFlags"]; exists {
+		c.SetOpenFlags(f.OpenFlags)
+	}
+	if _, exists := m["purgingInterval"]; exists {
+		c.SetPurgingInterval(f.PurgingInterval)
+	}
+	if _, exists := m["seqTreeOpt"]; exists {
+		c.SetSeqTreeOpt(f.SeqTreeOpt)
+	}
+	if _, exists := m["walFlushBeforeCommit"]; exists {
+		c.SetWalFlushBeforeCommit(f.WalFlushBeforeCommit)
+	}
+	if _, exists := m["walThreshold"]; exists {
+		c.SetWalThreshold(f.WalThreshold)
+	}
+	return c, nil
 }
