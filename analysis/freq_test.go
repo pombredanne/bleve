@@ -1,11 +1,16 @@
 //  Copyright (c) 2014 Couchbase, Inc.
-//  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
-//  except in compliance with the License. You may obtain a copy of the License at
-//    http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software distributed under the
-//  License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-//  either express or implied. See the License for the specific language governing permissions
-//  and limitations under the License.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 		http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package analysis
 
@@ -30,23 +35,24 @@ func TestTokenFrequency(t *testing.T) {
 		},
 	}
 	expectedResult := TokenFrequencies{
-		&TokenFreq{
+		"water": &TokenFreq{
 			Term: []byte("water"),
 			Locations: []*TokenLocation{
-				&TokenLocation{
+				{
 					Position: 1,
 					Start:    0,
 					End:      5,
 				},
-				&TokenLocation{
+				{
 					Position: 2,
 					Start:    6,
 					End:      11,
 				},
 			},
+			frequency: 2,
 		},
 	}
-	result := TokenFrequency(tokens)
+	result := TokenFrequency(tokens, nil, true)
 	if !reflect.DeepEqual(result, expectedResult) {
 		t.Errorf("expected %#v, got %#v", expectedResult, result)
 	}
@@ -54,15 +60,15 @@ func TestTokenFrequency(t *testing.T) {
 
 func TestTokenFrequenciesMergeAll(t *testing.T) {
 	tf1 := TokenFrequencies{
-		&TokenFreq{
+		"water": &TokenFreq{
 			Term: []byte("water"),
 			Locations: []*TokenLocation{
-				&TokenLocation{
+				{
 					Position: 1,
 					Start:    0,
 					End:      5,
 				},
-				&TokenLocation{
+				{
 					Position: 2,
 					Start:    6,
 					End:      11,
@@ -71,15 +77,15 @@ func TestTokenFrequenciesMergeAll(t *testing.T) {
 		},
 	}
 	tf2 := TokenFrequencies{
-		&TokenFreq{
+		"water": &TokenFreq{
 			Term: []byte("water"),
 			Locations: []*TokenLocation{
-				&TokenLocation{
+				{
 					Position: 1,
 					Start:    0,
 					End:      5,
 				},
-				&TokenLocation{
+				{
 					Position: 2,
 					Start:    6,
 					End:      11,
@@ -88,26 +94,26 @@ func TestTokenFrequenciesMergeAll(t *testing.T) {
 		},
 	}
 	expectedResult := TokenFrequencies{
-		&TokenFreq{
+		"water": &TokenFreq{
 			Term: []byte("water"),
 			Locations: []*TokenLocation{
-				&TokenLocation{
+				{
 					Position: 1,
 					Start:    0,
 					End:      5,
 				},
-				&TokenLocation{
+				{
 					Position: 2,
 					Start:    6,
 					End:      11,
 				},
-				&TokenLocation{
+				{
 					Field:    "tf2",
 					Position: 1,
 					Start:    0,
 					End:      5,
 				},
-				&TokenLocation{
+				{
 					Field:    "tf2",
 					Position: 2,
 					Start:    6,
@@ -125,15 +131,15 @@ func TestTokenFrequenciesMergeAll(t *testing.T) {
 func TestTokenFrequenciesMergeAllLeftEmpty(t *testing.T) {
 	tf1 := TokenFrequencies{}
 	tf2 := TokenFrequencies{
-		&TokenFreq{
+		"water": &TokenFreq{
 			Term: []byte("water"),
 			Locations: []*TokenLocation{
-				&TokenLocation{
+				{
 					Position: 1,
 					Start:    0,
 					End:      5,
 				},
-				&TokenLocation{
+				{
 					Position: 2,
 					Start:    6,
 					End:      11,
@@ -142,16 +148,16 @@ func TestTokenFrequenciesMergeAllLeftEmpty(t *testing.T) {
 		},
 	}
 	expectedResult := TokenFrequencies{
-		&TokenFreq{
+		"water": &TokenFreq{
 			Term: []byte("water"),
 			Locations: []*TokenLocation{
-				&TokenLocation{
+				{
 					Field:    "tf2",
 					Position: 1,
 					Start:    0,
 					End:      5,
 				},
-				&TokenLocation{
+				{
 					Field:    "tf2",
 					Position: 2,
 					Start:    6,
@@ -160,8 +166,8 @@ func TestTokenFrequenciesMergeAllLeftEmpty(t *testing.T) {
 			},
 		},
 	}
-	result := tf1.MergeAll("tf2", tf2)
-	if !reflect.DeepEqual(result, expectedResult) {
-		t.Errorf("expected %#v, got %#v", expectedResult, result)
+	tf1.MergeAll("tf2", tf2)
+	if !reflect.DeepEqual(tf1, expectedResult) {
+		t.Errorf("expected %#v, got %#v", expectedResult, tf1)
 	}
 }

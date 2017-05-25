@@ -1,182 +1,118 @@
 //  Copyright (c) 2014 Couchbase, Inc.
-//  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
-//  except in compliance with the License. You may obtain a copy of the License at
-//    http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software distributed under the
-//  License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-//  either express or implied. See the License for the specific language governing permissions
-//  and limitations under the License.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 		http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package null
 
 import (
 	"github.com/blevesearch/bleve/index/store"
+	"github.com/blevesearch/bleve/registry"
 )
+
+const Name = "null"
 
 type Store struct{}
 
-func Open() (*Store, error) {
-	rv := Store{}
-	return &rv, nil
+func New(mo store.MergeOperator, config map[string]interface{}) (store.KVStore, error) {
+	return &Store{}, nil
 }
 
 func (i *Store) Close() error {
 	return nil
 }
 
-func (i *Store) iterator(key []byte) store.KVIterator {
-	rv := newIterator(i)
-	return rv
-}
-
 func (i *Store) Reader() (store.KVReader, error) {
-	return newReader(i)
+	return &reader{}, nil
 }
 
 func (i *Store) Writer() (store.KVWriter, error) {
-	return newWriter(i)
+	return &writer{}, nil
 }
 
-func (i *Store) newBatch() store.KVBatch {
-	return newBatch(i)
-}
+type reader struct{}
 
-type Reader struct {
-	store *Store
-}
-
-func newReader(store *Store) (*Reader, error) {
-	return &Reader{
-		store: store,
-	}, nil
-}
-
-func (r *Reader) Get(key []byte) ([]byte, error) {
+func (r *reader) Get(key []byte) ([]byte, error) {
 	return nil, nil
 }
 
-func (r *Reader) Iterator(key []byte) store.KVIterator {
-	return r.store.iterator(key)
+func (r *reader) MultiGet(keys [][]byte) ([][]byte, error) {
+	return make([][]byte, len(keys)), nil
 }
 
-func (r *Reader) Close() error {
+func (r *reader) PrefixIterator(prefix []byte) store.KVIterator {
+	return &iterator{}
+}
+
+func (r *reader) RangeIterator(start, end []byte) store.KVIterator {
+	return &iterator{}
+}
+
+func (r *reader) Close() error {
 	return nil
 }
 
-type Iterator struct {
-	store *Store
-}
+type iterator struct{}
 
-func newIterator(store *Store) *Iterator {
-	rv := Iterator{
-		store: store,
-	}
-	return &rv
-}
+func (i *iterator) SeekFirst()    {}
+func (i *iterator) Seek(k []byte) {}
+func (i *iterator) Next()         {}
 
-func (i *Iterator) SeekFirst() {}
-
-func (i *Iterator) Seek(k []byte) {}
-
-func (i *Iterator) Next() {}
-
-func (i *Iterator) Current() ([]byte, []byte, bool) {
+func (i *iterator) Current() ([]byte, []byte, bool) {
 	return nil, nil, false
 }
 
-func (i *Iterator) Key() []byte {
+func (i *iterator) Key() []byte {
 	return nil
 }
 
-func (i *Iterator) Value() []byte {
+func (i *iterator) Value() []byte {
 	return nil
 }
 
-func (i *Iterator) Valid() bool {
+func (i *iterator) Valid() bool {
 	return false
 }
 
-func (i *Iterator) Close() error {
+func (i *iterator) Close() error {
 	return nil
 }
 
-type Batch struct {
-	store  *Store
-	keys   [][]byte
-	vals   [][]byte
-	merges map[string]store.AssociativeMergeChain
+type batch struct{}
+
+func (i *batch) Set(key, val []byte)   {}
+func (i *batch) Delete(key []byte)     {}
+func (i *batch) Merge(key, val []byte) {}
+func (i *batch) Reset()                {}
+func (i *batch) Close() error          { return nil }
+
+type writer struct{}
+
+func (w *writer) NewBatch() store.KVBatch {
+	return &batch{}
 }
 
-func newBatch(s *Store) *Batch {
-	rv := Batch{
-		store:  s,
-		keys:   make([][]byte, 0),
-		vals:   make([][]byte, 0),
-		merges: make(map[string]store.AssociativeMergeChain),
-	}
-	return &rv
+func (w *writer) NewBatchEx(options store.KVBatchOptions) ([]byte, store.KVBatch, error) {
+	return make([]byte, options.TotalBytes), w.NewBatch(), nil
 }
 
-func (i *Batch) Set(key, val []byte) {
-	i.keys = append(i.keys, key)
-	i.vals = append(i.vals, val)
-}
-
-func (i *Batch) Delete(key []byte) {
-	i.keys = append(i.keys, key)
-	i.vals = append(i.vals, nil)
-}
-
-func (i *Batch) Merge(key []byte, oper store.AssociativeMerge) {
-	opers, ok := i.merges[string(key)]
-	if !ok {
-		opers = make(store.AssociativeMergeChain, 0, 1)
-	}
-	opers = append(opers, oper)
-	i.merges[string(key)] = opers
-}
-
-func (i *Batch) Execute() error {
+func (w *writer) ExecuteBatch(store.KVBatch) error {
 	return nil
 }
 
-func (i *Batch) Close() error {
+func (w *writer) Close() error {
 	return nil
 }
 
-type Writer struct {
-	store *Store
-}
-
-func newWriter(store *Store) (*Writer, error) {
-	return &Writer{
-		store: store,
-	}, nil
-}
-
-func (w *Writer) Set(key, val []byte) error {
-	return nil
-}
-
-func (w *Writer) Delete(key []byte) error {
-	return nil
-}
-
-func (w *Writer) NewBatch() store.KVBatch {
-	return newBatch(w.store)
-}
-
-func (w *Writer) Close() error {
-	return nil
-}
-
-// these two methods can safely read using the regular
-// methods without a read transaction, because we know
-// that no one else is writing but us
-func (w *Writer) Get(key []byte) ([]byte, error) {
-	return nil, nil
-}
-
-func (w *Writer) Iterator(key []byte) store.KVIterator {
-	return w.store.iterator(key)
+func init() {
+	registry.RegisterKVStore(Name, New)
 }

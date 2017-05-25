@@ -1,3 +1,17 @@
+//  Copyright (c) 2014 Couchbase, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 		http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package http
 
 import (
@@ -22,8 +36,16 @@ func indexNameLookup(req *http.Request) string {
 func TestHandlers(t *testing.T) {
 
 	basePath := "testbase"
-	os.MkdirAll(basePath, 0700)
-	defer os.RemoveAll(basePath)
+	err := os.MkdirAll(basePath, 0700)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := os.RemoveAll(basePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	createIndexHandler := NewCreateIndexHandler(basePath)
 	createIndexHandler.IndexNameLookup = indexNameLookup
@@ -396,7 +418,7 @@ func TestHandlers(t *testing.T) {
 			},
 		},
 		{
-			Desc:    "search index doesnt exist",
+			Desc:    "search index doesn't exist",
 			Handler: searchHandler,
 			Path:    "/tix/search",
 			Method:  "POST",
@@ -540,7 +562,7 @@ func TestHandlers(t *testing.T) {
 			},
 		},
 		{
-			Desc:    "create alias referring to non-existant index",
+			Desc:    "create alias referring to non-existent index",
 			Handler: aliasHandler,
 			Path:    "/alias",
 			Method:  "POST",
@@ -628,7 +650,7 @@ func TestHandlers(t *testing.T) {
 			ResponseBody: []byte(`{"status":"ok"}`),
 		},
 		{
-			Desc:    "update alias add doesnt exist",
+			Desc:    "update alias add doesn't exist",
 			Handler: aliasHandler,
 			Path:    "/alias",
 			Method:  "POST",
@@ -652,7 +674,7 @@ func TestHandlers(t *testing.T) {
 			ResponseBody: []byte(`{"status":"ok"}`),
 		},
 		{
-			Desc:    "update alias remove doesnt exist",
+			Desc:    "update alias remove doesn't exist",
 			Handler: aliasHandler,
 			Path:    "/alias",
 			Method:  "POST",
@@ -690,6 +712,17 @@ func TestHandlers(t *testing.T) {
 			if didMatch != shouldMatch {
 				t.Errorf("%s: expected match %t for pattern %s, got %t", test.Desc, shouldMatch, pattern, didMatch)
 				t.Errorf("%s: response body was: %s", test.Desc, got)
+			}
+		}
+	}
+
+	// close indexes
+	for _, indexName := range IndexNames() {
+		index := UnregisterIndexByName(indexName)
+		if index != nil {
+			err := index.Close()
+			if err != nil {
+				t.Errorf("error closing index %s: %v", indexName, err)
 			}
 		}
 	}

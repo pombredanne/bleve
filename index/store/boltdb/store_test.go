@@ -1,218 +1,146 @@
 //  Copyright (c) 2014 Couchbase, Inc.
-//  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
-//  except in compliance with the License. You may obtain a copy of the License at
-//    http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software distributed under the
-//  License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-//  either express or implied. See the License for the specific language governing permissions
-//  and limitations under the License.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 		http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package boltdb
 
 import (
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/blevesearch/bleve/index/store"
+	"github.com/blevesearch/bleve/index/store/test"
+	"github.com/boltdb/bolt"
 )
 
-func TestStore(t *testing.T) {
-	s, err := Open("test", "bleve")
+func open(t *testing.T, mo store.MergeOperator) store.KVStore {
+	rv, err := New(mo, map[string]interface{}{"path": "test"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll("test")
-
-	CommonTestKVStore(t, s)
+	return rv
 }
 
-func TestReaderIsolation(t *testing.T) {
-	s, err := Open("test", "bleve")
+func cleanup(t *testing.T, s store.KVStore) {
+	err := s.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll("test")
-
-	CommonTestReaderIsolation(t, s)
+	err = os.RemoveAll("test")
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
-func CommonTestKVStore(t *testing.T, s store.KVStore) {
-
-	writer, err := s.Writer()
-	if err != nil {
-		t.Error(err)
-	}
-	err = writer.Set([]byte("a"), []byte("val-a"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = writer.Set([]byte("z"), []byte("val-z"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = writer.Delete([]byte("z"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	batch := writer.NewBatch()
-	batch.Set([]byte("b"), []byte("val-b"))
-	batch.Set([]byte("c"), []byte("val-c"))
-	batch.Set([]byte("d"), []byte("val-d"))
-	batch.Set([]byte("e"), []byte("val-e"))
-	batch.Set([]byte("f"), []byte("val-f"))
-	batch.Set([]byte("g"), []byte("val-g"))
-	batch.Set([]byte("h"), []byte("val-h"))
-	batch.Set([]byte("i"), []byte("val-i"))
-	batch.Set([]byte("j"), []byte("val-j"))
-
-	err = batch.Execute()
-	if err != nil {
-		t.Fatal(err)
-	}
-	writer.Close()
-
-	reader, err := s.Reader()
-	if err != nil {
-		t.Error(err)
-	}
-	defer reader.Close()
-	it := reader.Iterator([]byte("b"))
-	key, val, valid := it.Current()
-	if !valid {
-		t.Fatalf("valid false, expected true")
-	}
-	if string(key) != "b" {
-		t.Fatalf("expected key b, got %s", key)
-	}
-	if string(val) != "val-b" {
-		t.Fatalf("expected value val-b, got %s", val)
-	}
-
-	it.Next()
-	key, val, valid = it.Current()
-	if !valid {
-		t.Fatalf("valid false, expected true")
-	}
-	if string(key) != "c" {
-		t.Fatalf("expected key c, got %s", key)
-	}
-	if string(val) != "val-c" {
-		t.Fatalf("expected value val-c, got %s", val)
-	}
-
-	it.Seek([]byte("i"))
-	key, val, valid = it.Current()
-	if !valid {
-		t.Fatalf("valid false, expected true")
-	}
-	if string(key) != "i" {
-		t.Fatalf("expected key i, got %s", key)
-	}
-	if string(val) != "val-i" {
-		t.Fatalf("expected value val-i, got %s", val)
-	}
-
-	it.Close()
+func TestBoltDBKVCrud(t *testing.T) {
+	s := open(t, nil)
+	defer cleanup(t, s)
+	test.CommonTestKVCrud(t, s)
 }
 
-func CommonTestReaderIsolation(t *testing.T, s store.KVStore) {
-	// insert a kv pair
-	writer, err := s.Writer()
-	if err != nil {
-		t.Error(err)
-	}
-	err = writer.Set([]byte("a"), []byte("val-a"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	writer.Close()
+func TestBoltDBReaderIsolation(t *testing.T) {
+	s := open(t, nil)
+	defer cleanup(t, s)
+	test.CommonTestReaderIsolation(t, s)
+}
 
-	// create an isolated reader
-	reader, err := s.Reader()
-	if err != nil {
-		t.Error(err)
-	}
-	defer reader.Close()
+func TestBoltDBReaderOwnsGetBytes(t *testing.T) {
+	s := open(t, nil)
+	defer cleanup(t, s)
+	test.CommonTestReaderOwnsGetBytes(t, s)
+}
 
-	// verify that we see the value already inserted
-	val, err := reader.Get([]byte("a"))
-	if err != nil {
-		t.Error(err)
-	}
-	if !reflect.DeepEqual(val, []byte("val-a")) {
-		t.Errorf("expected val-a, got nil")
-	}
+func TestBoltDBWriterOwnsBytes(t *testing.T) {
+	s := open(t, nil)
+	defer cleanup(t, s)
+	test.CommonTestWriterOwnsBytes(t, s)
+}
 
-	// verify that an iterator sees it
-	count := 0
-	it := reader.Iterator([]byte{0})
-	defer it.Close()
-	for it.Valid() {
-		it.Next()
-		count++
-	}
-	if count != 1 {
-		t.Errorf("expected iterator to see 1, saw %d", count)
-	}
+func TestBoltDBPrefixIterator(t *testing.T) {
+	s := open(t, nil)
+	defer cleanup(t, s)
+	test.CommonTestPrefixIterator(t, s)
+}
 
-	// add something after the reader was created
-	writer, err = s.Writer()
-	if err != nil {
-		t.Error(err)
-	}
-	err = writer.Set([]byte("b"), []byte("val-b"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	writer.Close()
+func TestBoltDBPrefixIteratorSeek(t *testing.T) {
+	s := open(t, nil)
+	defer cleanup(t, s)
+	test.CommonTestPrefixIteratorSeek(t, s)
+}
 
-	// ensure that a newer reader sees it
-	newReader, err := s.Reader()
-	if err != nil {
-		t.Error(err)
-	}
-	defer newReader.Close()
-	val, err = newReader.Get([]byte("b"))
-	if err != nil {
-		t.Error(err)
-	}
-	if !reflect.DeepEqual(val, []byte("val-b")) {
-		t.Errorf("expected val-b, got nil")
-	}
+func TestBoltDBRangeIterator(t *testing.T) {
+	s := open(t, nil)
+	defer cleanup(t, s)
+	test.CommonTestRangeIterator(t, s)
+}
 
-	// ensure that the director iterator sees it
-	count = 0
-	it = newReader.Iterator([]byte{0})
-	defer it.Close()
-	for it.Valid() {
-		it.Next()
-		count++
-	}
-	if count != 2 {
-		t.Errorf("expected iterator to see 2, saw %d", count)
+func TestBoltDBRangeIteratorSeek(t *testing.T) {
+	s := open(t, nil)
+	defer cleanup(t, s)
+	test.CommonTestRangeIteratorSeek(t, s)
+}
+
+func TestBoltDBMerge(t *testing.T) {
+	s := open(t, &test.TestMergeCounter{})
+	defer cleanup(t, s)
+	test.CommonTestMerge(t, s)
+}
+
+func TestBoltDBConfig(t *testing.T) {
+	var tests = []struct {
+		in          map[string]interface{}
+		path        string
+		bucket      string
+		noSync      bool
+		fillPercent float64
+	}{
+		{
+			map[string]interface{}{"path": "test", "bucket": "mybucket", "nosync": true, "fillPercent": 0.75},
+			"test",
+			"mybucket",
+			true,
+			0.75,
+		},
+		{
+			map[string]interface{}{"path": "test"},
+			"test",
+			"bleve",
+			false,
+			bolt.DefaultFillPercent,
+		},
 	}
 
-	// but that the isolated reader does not
-	val, err = reader.Get([]byte("b"))
-	if err != nil {
-		t.Error(err)
+	for _, test := range tests {
+		kv, err := New(nil, test.in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bs, ok := kv.(*Store)
+		if !ok {
+			t.Fatal("failed type assertion to *boltdb.Store")
+		}
+		if bs.path != test.path {
+			t.Fatalf("path: expected %q, got %q", test.path, bs.path)
+		}
+		if bs.bucket != test.bucket {
+			t.Fatalf("bucket: expected %q, got %q", test.bucket, bs.bucket)
+		}
+		if bs.noSync != test.noSync {
+			t.Fatalf("noSync: expected %t, got %t", test.noSync, bs.noSync)
+		}
+		if bs.fillPercent != test.fillPercent {
+			t.Fatalf("fillPercent: expected %f, got %f", test.fillPercent, bs.fillPercent)
+		}
+		cleanup(t, kv)
 	}
-	if val != nil {
-		t.Errorf("expected nil, got %v", val)
-	}
-
-	// and ensure that the iterator on the isolated reader also does not
-	count = 0
-	it = reader.Iterator([]byte{0})
-	defer it.Close()
-	for it.Valid() {
-		it.Next()
-		count++
-	}
-	if count != 1 {
-		t.Errorf("expected iterator to see 1, saw %d", count)
-	}
-
 }

@@ -1,3 +1,17 @@
+//  Copyright (c) 2014 Couchbase, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 		http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package search
 
 import (
@@ -13,15 +27,15 @@ func TestTermFacetResultsMerge(t *testing.T) {
 		Missing: 25,
 		Other:   25,
 		Terms: []*TermFacet{
-			&TermFacet{
+			{
 				Term:  "blog",
 				Count: 25,
 			},
-			&TermFacet{
+			{
 				Term:  "comment",
 				Count: 24,
 			},
-			&TermFacet{
+			{
 				Term:  "feedback",
 				Count: 1,
 			},
@@ -33,11 +47,11 @@ func TestTermFacetResultsMerge(t *testing.T) {
 		Missing: 22,
 		Other:   15,
 		Terms: []*TermFacet{
-			&TermFacet{
+			{
 				Term:  "clothing",
 				Count: 35,
 			},
-			&TermFacet{
+			{
 				Term:  "electronics",
 				Count: 25,
 			},
@@ -54,15 +68,15 @@ func TestTermFacetResultsMerge(t *testing.T) {
 		Missing: 25,
 		Other:   25,
 		Terms: []*TermFacet{
-			&TermFacet{
+			{
 				Term:  "blog",
 				Count: 25,
 			},
-			&TermFacet{
+			{
 				Term:  "comment",
 				Count: 22,
 			},
-			&TermFacet{
+			{
 				Term:  "flag",
 				Count: 3,
 			},
@@ -78,15 +92,15 @@ func TestTermFacetResultsMerge(t *testing.T) {
 		Missing: 50,
 		Other:   51,
 		Terms: []*TermFacet{
-			&TermFacet{
+			{
 				Term:  "blog",
 				Count: 50,
 			},
-			&TermFacet{
+			{
 				Term:  "comment",
 				Count: 46,
 			},
-			&TermFacet{
+			{
 				Term:  "flag",
 				Count: 3,
 			},
@@ -110,24 +124,29 @@ func TestNumericFacetResultsMerge(t *testing.T) {
 	medhi := 6.0
 	hihigher := 9.0
 
+	// why second copy? the pointers may be different, but values the same
+	lowmed2 := 3.0
+	medhi2 := 6.0
+	hihigher2 := 9.0
+
 	fr1 := &FacetResult{
 		Field:   "rating",
 		Total:   100,
 		Missing: 25,
 		Other:   25,
 		NumericRanges: []*NumericRangeFacet{
-			&NumericRangeFacet{
+			{
 				Name:  "low",
 				Max:   &lowmed,
 				Count: 25,
 			},
-			&NumericRangeFacet{
+			{
 				Name:  "med",
 				Count: 24,
 				Max:   &lowmed,
 				Min:   &medhi,
 			},
-			&NumericRangeFacet{
+			{
 				Name:  "hi",
 				Count: 1,
 				Min:   &medhi,
@@ -145,20 +164,20 @@ func TestNumericFacetResultsMerge(t *testing.T) {
 		Missing: 25,
 		Other:   25,
 		NumericRanges: []*NumericRangeFacet{
-			&NumericRangeFacet{
+			{
 				Name:  "low",
-				Max:   &lowmed,
+				Max:   &lowmed2,
 				Count: 25,
 			},
-			&NumericRangeFacet{
+			{
 				Name:  "med",
-				Max:   &lowmed,
-				Min:   &medhi,
+				Max:   &lowmed2,
+				Min:   &medhi2,
 				Count: 22,
 			},
-			&NumericRangeFacet{
+			{
 				Name:  "highest",
-				Min:   &hihigher,
+				Min:   &hihigher2,
 				Count: 3,
 			},
 		},
@@ -173,18 +192,18 @@ func TestNumericFacetResultsMerge(t *testing.T) {
 		Missing: 50,
 		Other:   51,
 		NumericRanges: []*NumericRangeFacet{
-			&NumericRangeFacet{
+			{
 				Name:  "low",
 				Count: 50,
 				Max:   &lowmed,
 			},
-			&NumericRangeFacet{
+			{
 				Name:  "med",
 				Max:   &lowmed,
 				Min:   &medhi,
 				Count: 46,
 			},
-			&NumericRangeFacet{
+			{
 				Name:  "highest",
 				Min:   &hihigher,
 				Count: 3,
@@ -208,24 +227,30 @@ func TestDateFacetResultsMerge(t *testing.T) {
 	medhi := "2011-01-01"
 	hihigher := "2012-01-01"
 
+	// why second copy? the pointer are to strings done by date time parsing
+	// inside the facet generation, so comparing pointers will not work
+	lowmed2 := "2010-01-01"
+	medhi2 := "2011-01-01"
+	hihigher2 := "2012-01-01"
+
 	fr1 := &FacetResult{
 		Field:   "birthday",
 		Total:   100,
 		Missing: 25,
 		Other:   25,
 		DateRanges: []*DateRangeFacet{
-			&DateRangeFacet{
+			{
 				Name:  "low",
 				End:   &lowmed,
 				Count: 25,
 			},
-			&DateRangeFacet{
+			{
 				Name:  "med",
 				Count: 24,
 				Start: &lowmed,
 				End:   &medhi,
 			},
-			&DateRangeFacet{
+			{
 				Name:  "hi",
 				Count: 1,
 				Start: &medhi,
@@ -243,20 +268,20 @@ func TestDateFacetResultsMerge(t *testing.T) {
 		Missing: 25,
 		Other:   25,
 		DateRanges: []*DateRangeFacet{
-			&DateRangeFacet{
+			{
 				Name:  "low",
-				End:   &lowmed,
+				End:   &lowmed2,
 				Count: 25,
 			},
-			&DateRangeFacet{
+			{
 				Name:  "med",
-				Start: &lowmed,
-				End:   &medhi,
+				Start: &lowmed2,
+				End:   &medhi2,
 				Count: 22,
 			},
-			&DateRangeFacet{
+			{
 				Name:  "highest",
-				Start: &hihigher,
+				Start: &hihigher2,
 				Count: 3,
 			},
 		},
@@ -271,18 +296,18 @@ func TestDateFacetResultsMerge(t *testing.T) {
 		Missing: 50,
 		Other:   51,
 		DateRanges: []*DateRangeFacet{
-			&DateRangeFacet{
+			{
 				Name:  "low",
 				Count: 50,
 				End:   &lowmed,
 			},
-			&DateRangeFacet{
+			{
 				Name:  "med",
 				Start: &lowmed,
 				End:   &medhi,
 				Count: 46,
 			},
-			&DateRangeFacet{
+			{
 				Name:  "highest",
 				Start: &hihigher,
 				Count: 3,
